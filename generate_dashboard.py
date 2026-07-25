@@ -122,6 +122,23 @@ def multi_count(df: pd.DataFrame, colname: str):
     return dict(sorted(counts.items(), key=lambda x: -x[1]))
 
 
+def full_stats(sub: pd.DataFrame):
+    """KPI scores PLUS every breakdown chart's data, scoped to just this cut (industry/role/size/overall)."""
+    base = kpis(sub)
+    if base is None:
+        return None
+    base['maturity_dist'] = sub['maturity'].value_counts().to_dict() if 'maturity' in sub.columns else {}
+    base['barriers'] = multi_count(sub, 'barrier')
+    base['skills_improve'] = multi_count(sub, 'skills_improve')
+    base['challenges'] = multi_count(sub, 'challenges')
+    base['perception'] = multi_count(sub, 'perception')
+    base['investment'] = sub['investment'].value_counts().to_dict() if 'investment' in sub.columns else {}
+    base['owner'] = sub['owner'].value_counts().to_dict() if 'owner' in sub.columns else {}
+    base['impact_track'] = multi_count(sub, 'impact_track')
+    base['prioritization'] = multi_count(sub, 'prioritization')
+    return base
+
+
 def group_size(v):
     v = str(v).strip()
     if v in ('<100', '100 - 500'):
@@ -135,12 +152,12 @@ def group_size(v):
 
 def build_data_block(df: pd.DataFrame) -> str:
     df = score(df)
-    overall = kpis(df)
+    overall = full_stats(df)
 
     industry = {"All Industries": overall}
     if 'industry' in df.columns:
         for ind, cnt in df['industry'].value_counts().items():
-            industry[ind] = kpis(df[df['industry'] == ind])
+            industry[ind] = full_stats(df[df['industry'] == ind])
 
     def group_role(r):
         r = str(r).strip()
@@ -156,25 +173,15 @@ def build_data_block(df: pd.DataFrame) -> str:
     if 'role' in df.columns:
         df['role_group'] = df['role'].map(group_role)
         for rg in df['role_group'].unique():
-            role[rg] = kpis(df[df['role_group'] == rg])
+            role[rg] = full_stats(df[df['role_group'] == rg])
 
-    size = {}
+    size = {"All Sizes": overall}
     if 'size' in df.columns:
         df['size_group'] = df['size'].map(group_size)
         for sg in ['Small (Under 500 employees)', 'Medium (500 - 5,000 employees)', 'Large (5,000+ employees)']:
             sub = df[df['size_group'] == sg]
             if len(sub) > 0:
-                size[sg] = kpis(sub)
-
-    maturity_dist = df['maturity'].value_counts().to_dict() if 'maturity' in df.columns else {}
-    barriers = multi_count(df, 'barrier')
-    skills_improve = multi_count(df, 'skills_improve')
-    challenges = multi_count(df, 'challenges')
-    perception = multi_count(df, 'perception')
-    investment = df['investment'].value_counts().to_dict() if 'investment' in df.columns else {}
-    owner = df['owner'].value_counts().to_dict() if 'owner' in df.columns else {}
-    impact_track = multi_count(df, 'impact_track')
-    prioritization = multi_count(df, 'prioritization')
+                size[sg] = full_stats(sub)
 
     # THEMES and MATRIX (secondary-research validation) stay fixed --
     # they compare against outside studies, not against live response counts.
@@ -208,15 +215,6 @@ const OVERALL = {js(overall)};
 const INDUSTRY = {js(industry)};
 const ROLE = {js(role)};
 const SIZE = {js(size)};
-const MATURITY_DIST = {js(maturity_dist)};
-const BARRIERS = {js(barriers)};
-const SKILLS_IMPROVE = {js(skills_improve)};
-const CHALLENGES = {js(challenges)};
-const PERCEPTION = {js(perception)};
-const INVESTMENT = {js(investment)};
-const OWNER = {js(owner)};
-const IMPACT_TRACK = {js(impact_track)};
-const PRIORITIZATION = {js(prioritization)};
 const THEMES = {js(themes)};
 const MATRIX = {js(matrix)};
 /* ==DATA_BLOCK_END== */
